@@ -1,80 +1,47 @@
-# Use PHP 8.2 with Nginx and PHP-FPM
-FROM richarvey/nginx-php-fpm:3.1.6
+FROM php:8.3.11-fpm
 
-# Copy source code
-COPY . .
-
-# Image config
-ENV SKIP_COMPOSER 1
-ENV WEBROOT /var/www/html/public
-ENV PHP_ERRORS_STDERR 1
-ENV RUN_SCRIPTS 1
-ENV REAL_IP_HEADER 1
-
-# Laravel config
-ENV APP_ENV production
-ENV APP_DEBUG false
-ENV LOG_CHANNEL stderr
-
-# Allow composer to run as root
-ENV COMPOSER_ALLOW_SUPERUSER 1
-
-# Install system dependencies
-RUN apk add --no-cache \
-    git \
-    curl \
-    libpng-dev \
-    libxml2-dev \
-    postgresql-dev \
-    oniguruma-dev \
-    freetype-dev \
-    libjpeg-turbo-dev \
+# Update package list and install dependencies
+RUN apt-get update && apt-get install -y \
     libzip-dev \
-    zip \
-    unzip \
+    libpng-dev \
+    postgresql-client \
+    libpq-dev \
+    libicu-dev \
     nodejs \
-    npm
-
-# Install PHP extensions
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd zip
-
-# Install Redis extension
-RUN pecl install redis && docker-php-ext-enable redis
+    npm \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+COPY --from=composer:latest /usr/bin/composer /usr/local/bin/composer
+ENV COMPOSER_ALLOW_SUPERUSER=1
 
-# Set working directory
-WORKDIR /var/www/html
+# Install required packages
+RUN docker-php-ext-install pdo pgsql pdo_pgsql gd bcmath zip intl \
+    && docker-php-ext-configure intl \
+    && pecl install redis \
+    && docker-php-ext-enable redis
 
-# Copy composer files
-COPY composer.json composer.lock ./
+# Set working directory to root
+WORKDIR /var/www/html/
 
-# Install composer dependencies
-RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress --prefer-dist
+# Copy the codebase
+COPY . ./
 
-# Copy package.json files
-COPY package.json package-lock.json ./
+# Run composer install for production and give permissions
+RUN sed 's_@php artisan package:discover_/bin/true_;' -i composer.json \
+    && composer install --ignore-platform-req=php --ignore-platform-req=ext-intl --no-dev --optimize-autoloader \
+    && composer clear-cache \
+    && php artisan package:discover --ansi \
+    && chmod -R 775 storage \
+    && chown -R www-data:www-data storage \
+    && mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache
 
-# Install npm dependencies and build assets
-RUN npm ci --only=production
-RUN npm run build
+# Copy entrypoint
+COPY ./scripts/php-fpm-entrypoint /usr/local/bin/php-entrypoint
 
-# Copy application files
-COPY . .
+# Give permissions to everything in bin/
+RUN chmod a+x /usr/local/bin/*
 
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html/storage \
-    && chmod -R 755 /var/www/html/bootstrap/cache
-
-# Create deployment script
-COPY docker/deploy.sh /scripts/
-RUN chmod +x /scripts/deploy.sh
-
-# Expose port
-EXPOSE 80
-
-# Start script
-CMD ["/scripts/deploy.sh"]
+ENTRYPOINT ["/usr/local/bin/php-entrypoint"]
+CMD ["php-fpm"]
