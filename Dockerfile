@@ -26,13 +26,18 @@ RUN apk add --no-cache \
     libpng-dev \
     libxml2-dev \
     postgresql-dev \
+    oniguruma-dev \
+    freetype-dev \
+    libjpeg-turbo-dev \
+    libzip-dev \
     zip \
     unzip \
     nodejs \
     npm
 
 # Install PHP extensions
-RUN docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd zip
 
 # Install Redis extension
 RUN pecl install redis && docker-php-ext-enable redis
