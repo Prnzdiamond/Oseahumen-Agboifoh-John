@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Support\Env;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OwnerResource;
 use Illuminate\Support\Facades\Cache;
@@ -71,7 +72,6 @@ class OwnerController extends Controller
                 ]);
             });
         }
-
         return response()->json([
             "data" => new OwnerResource($owner),
             "message" => "Owner details retrieved successfully",
