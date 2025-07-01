@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     libicu-dev \
     nodejs \
     npm \
+    nginx \
+    supervisor \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -22,14 +24,14 @@ RUN docker-php-ext-install pdo pgsql pdo_pgsql gd bcmath zip intl \
     && pecl install redis \
     && docker-php-ext-enable redis
 
-# Set working directory to root
+# Set working directory
 WORKDIR /var/www/html/
 
 # Copy the codebase
 COPY . ./
 
 # Run composer install for production and give permissions
-RUN sed 's_@php artisan package:discover_/bin/true_;' -i composer.json \
+RUN sed 's@php artisan package:discover/bin/true_;' -i composer.json \
     && composer install --ignore-platform-req=php --ignore-platform-req=ext-intl --no-dev --optimize-autoloader \
     && composer clear-cache \
     && php artisan package:discover --ansi \
@@ -37,11 +39,16 @@ RUN sed 's_@php artisan package:discover_/bin/true_;' -i composer.json \
     && chown -R www-data:www-data storage \
     && mkdir -p storage/framework/sessions storage/framework/views storage/framework/cache
 
-# Copy entrypoint
-COPY ./scripts/php-fpm-entrypoint /usr/local/bin/php-entrypoint
+# Copy configuration files
+COPY ./nginx-render.conf /etc/nginx/sites-available/default
+COPY ./supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY ./scripts/render-entrypoint /usr/local/bin/render-entrypoint
 
-# Give permissions to everything in bin/
-RUN chmod a+x /usr/local/bin/*
+# Give permissions
+RUN chmod a+x /usr/local/bin/render-entrypoint
 
-ENTRYPOINT ["/usr/local/bin/php-entrypoint"]
-CMD ["php-fpm"]
+# Expose port (Render will map this to the PORT env var)
+EXPOSE 10000
+
+ENTRYPOINT ["/usr/local/bin/render-entrypoint"]
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
