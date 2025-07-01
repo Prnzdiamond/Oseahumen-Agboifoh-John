@@ -31,8 +31,7 @@ WORKDIR /var/www/html/
 COPY . ./
 
 # Run composer install for production and give permissions
-RUN sed 's@php artisan package:discover/bin/true_;' -i composer.json \
-    && composer install --ignore-platform-req=php --ignore-platform-req=ext-intl --no-dev --optimize-autoloader \
+RUN composer install --ignore-platform-req=php --ignore-platform-req=ext-intl --no-dev --optimize-autoloader \
     && composer clear-cache \
     && php artisan package:discover --ansi \
     && chmod -R 775 storage \
