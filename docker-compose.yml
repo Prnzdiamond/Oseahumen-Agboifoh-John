@@ -1,0 +1,41 @@
+services:
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        restart: unless-stopped
+        ports:
+            - 9000:9000
+        env_file:
+            - .env
+        volumes:
+            - storage:/var/www/html/storage:rw
+            - public:/var/www/html/public:rw
+
+    queue-worker:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        restart: unless-stopped
+        command: php artisan queue:work
+        environment:
+            IS_WORKER: "true"
+        env_file:
+            - .env
+        volumes:
+            - storage:/var/www/html/storage:rw
+            - public:/var/www/html/public:rw
+
+    nginx:
+        image: nginx:1-alpine
+        ports:
+            - 80:80
+            - 443:443
+        volumes:
+            - ./nginx.conf:/etc/nginx/templates/default.conf.template
+            - storage:/var/www/html/storage:rw
+            - public:/var/www/html/public:ro
+
+volumes:
+    storage:
+    public:
