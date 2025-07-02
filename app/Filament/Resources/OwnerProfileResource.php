@@ -39,7 +39,7 @@ class OwnerProfileResource extends Resource
                 Section::make('Basic Information')
                     ->schema([
                         FileUpload::make('avatar')
-                            ->disk('public')
+                            ->disk('cloudinary')
                             ->directory('avatars')
                             ->image()
                             ->preserveFilenames()
@@ -329,7 +329,7 @@ class OwnerProfileResource extends Resource
         return $table
             ->columns([
                 ImageColumn::make('avatar')
-                    ->disk('public')
+                    ->disk('cloudinary')
                     ->circular()
                     ->label('Avatar'),
 

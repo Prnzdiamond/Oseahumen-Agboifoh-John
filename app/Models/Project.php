@@ -194,9 +194,34 @@ class Project extends Model
             if ($project->isDirty('title')) {
                 $project->slug = Str::slug($project->title);
             }
+
+            // Add this section for Cloudinary file deletion
+            if ($project->isDirty('image') && $project->getOriginal('image')) {
+                $oldImage = $project->getOriginal('image');
+                if ($oldImage) {
+                    \Illuminate\Support\Facades\Storage::disk('cloudinary')->delete($oldImage);
+                }
+            }
+
+            if ($project->isDirty('cover_image') && $project->getOriginal('cover_image')) {
+                $oldCoverImage = $project->getOriginal('cover_image');
+                if ($oldCoverImage) {
+                    \Illuminate\Support\Facades\Storage::disk('cloudinary')->delete($oldCoverImage);
+                }
+            }
         });
 
-        // Clear cache when project is updated
+        // Add this new static::deleting method
+        static::deleting(function ($project) {
+            if ($project->image) {
+                \Illuminate\Support\Facades\Storage::disk('cloudinary')->delete($project->image);
+            }
+            if ($project->cover_image) {
+                \Illuminate\Support\Facades\Storage::disk('cloudinary')->delete($project->cover_image);
+            }
+        });
+
+        // Clear cache when project is updated (existing code)
         static::saved(function ($project) {
             \Illuminate\Support\Facades\Cache::forget('projects.all');
             \Illuminate\Support\Facades\Cache::forget("project.{$project->slug}");

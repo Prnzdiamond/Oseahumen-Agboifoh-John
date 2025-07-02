@@ -30,11 +30,11 @@ class ProjectResource extends JsonResource
             'duration' => $this->duration,
             'formatted_duration' => $this->getFormattedDuration(),
             'is_featured' => $this->is_featured,
-            'cover_image' => $this->cover_image ? Storage::disk('public')->url($this->cover_image) : null,
-            'main_image' => $this->image ? Storage::disk('public')->url($this->image) : null,
+            'cover_image' => $this->cover_image ? Storage::disk('cloudinary')->url($this->cover_image) : null,
+            'main_image' => $this->image ? Storage::disk('cloudinary')->url($this->image) : null,
             'images' => $this->images
                 ->pluck('image')
-                ->map(fn($path) => Storage::disk('public')->url($path)),
+                ->map(fn($path) => Storage::disk('cloudinary')->url($path)),
             'created_at' => $this->created_at->toIso8601String(),
             'updated_at' => $this->updated_at->toIso8601String(),
 

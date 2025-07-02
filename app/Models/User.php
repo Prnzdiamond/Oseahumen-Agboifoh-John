@@ -388,6 +388,22 @@ class User extends Authenticatable implements FilamentUser
     {
         parent::boot();
 
+        static::updating(function ($user) {
+            if ($user->isDirty('avatar') && $user->getOriginal('avatar')) {
+                // If avatar is being updated, delete the old one
+                $oldAvatar = $user->getOriginal('avatar');
+                if ($oldAvatar) {
+                    \Illuminate\Support\Facades\Storage::disk('cloudinary')->delete($oldAvatar);
+                }
+            }
+        });
+
+        static::deleting(function ($user) {
+            if ($user->avatar) {
+                \Illuminate\Support\Facades\Storage::disk('cloudinary')->delete($user->avatar);
+            }
+        });
+
         static::saved(function ($user) {
             if ($user->is_owner) {
                 \Illuminate\Support\Facades\Cache::forget('owner.data');

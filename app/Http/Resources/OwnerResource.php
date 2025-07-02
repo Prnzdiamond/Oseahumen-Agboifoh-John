@@ -19,7 +19,7 @@ class OwnerResource extends JsonResource
             'name' => $this->name,
             'headline' => $this->headline,
             'bio' => $this->bio,
-            'avatar' => $this->avatar ? Storage::disk('public')->url($this->avatar) : null,
+            'avatar' => $this->avatar ? Storage::disk('cloudinary')->url($this->avatar) : null,
             'tech_stack' => $this->tech_stack_list ?? [],
             'expertise' => $this->expertise_list ?? [],
             'links' => $this->urls_list ?? [],

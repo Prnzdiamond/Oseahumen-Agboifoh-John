@@ -9,7 +9,8 @@ Route::group(["middleware" => "validate.origin"], function () {
     Route::get('projects', [ProjectController::class, 'index']);
     Route::get('projects/{slug}', [ProjectController::class, 'show']);
     // routes/api.php
-    Route::get('owner', [OwnerController::class, 'show']);
     // routes/api.php
     Route::post('/contact', [ContactController::class, 'send']);
 });
+
+Route::get('owner', [OwnerController::class, 'show']);

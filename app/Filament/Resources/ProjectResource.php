@@ -87,14 +87,14 @@ class ProjectResource extends Resource
                             ->label('Main Image')
                             ->image()
                             ->directory('project-main-images')
-                            ->disk('public')
+                            ->disk('cloudinary')
                             ->nullable(),
 
                         FileUpload::make('cover_image')
                             ->label('Cover Image')
                             ->image()
                             ->directory('project-covers')
-                            ->disk('public')
+                            ->disk('cloudinary')
                             ->nullable(),
                     ])
                     ->columns(2),
@@ -245,7 +245,7 @@ class ProjectResource extends Resource
         return $table
             ->columns([
                 ImageColumn::make('image')
-                    ->disk('public')
+                    ->disk('cloudinary')
                     ->label('Image')
                     ->circular()
                     ->size(50),
