@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
+use Cloudinary\Api\Exception\NotFound;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -19,7 +20,15 @@ class OwnerResource extends JsonResource
             'name' => $this->name,
             'headline' => $this->headline,
             'bio' => $this->bio,
-            'avatar' => $this->avatar ? Storage::disk('cloudinary')->url($this->avatar) : null,
+            'avatar' => $this->avatar ? (fn() =>
+                (function () {
+                    try {
+                        return Storage::disk('cloudinary')->url($this->avatar);
+                    } catch (NotFound $e) {
+                        return null;
+                    }
+                })()
+            )() : null,
             'tech_stack' => $this->tech_stack_list ?? [],
             'expertise' => $this->expertise_list ?? [],
             'links' => $this->urls_list ?? [],
