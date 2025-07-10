@@ -22,9 +22,11 @@ class ContactController extends Controller
 
         Mail::raw("Message from {$request->name} ({$request->email}):\n\n{$request->message}", function ($mail) use ($request) {
             $mail->to('oseahumenagboifoh@gmail.com')
-                ->from($request->email, $request->name)
+                ->from('oseahumenagboifoh@gmail.com', 'Portfolio Contact Form')
+                ->replyTo($request->email, $request->name)
                 ->subject('New Portfolio Contact');
         });
+
 
         return response()->json([
             'message' => 'Email sent successfully',
