@@ -21,7 +21,7 @@ class ContactController extends Controller
         }
 
         Mail::raw("Message from {$request->name} ({$request->email}):\n\n{$request->message}", function ($mail) use ($request) {
-            $mail->to(env('MAIL_CONTACT_RECIPIENT', env('MAIL_FROM_ADDRESS')))
+            $mail->to('oseahumenagboifoh@gmail.com')
                 ->from($request->email, $request->name)
                 ->subject('New Portfolio Contact');
         });
