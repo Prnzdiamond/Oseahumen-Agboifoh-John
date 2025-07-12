@@ -73,7 +73,7 @@ class OwnerController extends Controller
             });
         }
 
-        $data = Cache::rememberForever("owner-data.transformed", function ($owner) {
+        $data = Cache::rememberForever("owner-data.transformed", function () use ($owner) {
             return new OwnerResource($owner);
         });
 
