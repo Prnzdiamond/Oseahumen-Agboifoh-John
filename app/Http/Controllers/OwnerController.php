@@ -16,7 +16,7 @@ class OwnerController extends Controller
     public function show()
     {
         // Cache owner data for 2 hours
-        $owner = Cache::remember('owner.data', 7200, function () {
+        $owner = Cache::rememberForever('owner.data', function () {
             return User::select([
                 'id',
                 'name',
@@ -39,7 +39,7 @@ class OwnerController extends Controller
 
         if (!$owner) {
             // Return cached fallback data
-            return Cache::remember('owner.fallback', 3600, function () {
+            return Cache::rememberForever('owner.fallback', function () {
                 return response()->json([
                     "message" => "Owner not found",
                     "data" => [
@@ -72,8 +72,13 @@ class OwnerController extends Controller
                 ]);
             });
         }
+
+        $data = Cache::rememberForever("owner-data.transformed", function ($owner) {
+            return new OwnerResource($owner);
+        });
+
         return response()->json([
-            "data" => new OwnerResource($owner),
+            "data" => $data,
             "message" => "Owner details retrieved successfully",
             "success" => true
         ]);

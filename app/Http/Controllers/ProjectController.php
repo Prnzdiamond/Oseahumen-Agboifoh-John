@@ -16,7 +16,7 @@ class ProjectController extends Controller
     public function index()
     {
         // Cache projects for 1 hour (3600 seconds)
-        $projects = Cache::remember('projects.all', 3600, function () {
+        $projects = Cache::rememberForever('projects.all', function () {
             return Project::with([
                 'images' => function ($query) {
                     $query->select('id', 'project_id', 'image');
@@ -53,8 +53,12 @@ class ProjectController extends Controller
             ], 200);
         }
 
+        $data = Cache::rememberForever('projects.transformed', function () use ($projects) {
+            return ProjectResource::collection($projects)->resolve(); // Get raw array
+        });
+
         return response()->json([
-            'data' => ProjectResource::collection($projects),
+            'data' => $data,
             'message' => 'Projects retrieved successfully',
             'success' => true,
         ], 200);
@@ -66,7 +70,7 @@ class ProjectController extends Controller
     public function show(string $slug)
     {
         // Cache individual project for 30 minutes
-        $project = Cache::remember("project.{$slug}", 1800, function () use ($slug) {
+        $project = Cache::rememberForever("project.{$slug}", function () use ($slug) {
             return Project::with([
                 'images' => function ($query) {
                     $query->select('id', 'project_id', 'image');
@@ -102,8 +106,12 @@ class ProjectController extends Controller
             ], 404);
         }
 
+
+        $data = Cache::rememberForever("projects.transformed.{$slug}", function () use ($project) {
+            return new ProjectResource($project); // Get raw array
+        });
         return response()->json([
-            'data' => new ProjectResource($project),
+            'data' => $data,
             'message' => 'Project retrieved successfully',
             'success' => true,
         ], 200);

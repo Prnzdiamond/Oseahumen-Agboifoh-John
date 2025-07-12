@@ -396,6 +396,9 @@ class User extends Authenticatable implements FilamentUser
                     \Illuminate\Support\Facades\Storage::disk('cloudinary')->delete($oldAvatar);
                 }
             }
+            \Illuminate\Support\Facades\Cache::forget('owner.data');
+            \Illuminate\Support\Facades\Cache::forget('owner.fallback');
+            \Illuminate\Support\Facades\Cache::forget('owner-data.transformed');
         });
 
         static::deleting(function ($user) {
@@ -408,6 +411,8 @@ class User extends Authenticatable implements FilamentUser
             if ($user->is_owner) {
                 \Illuminate\Support\Facades\Cache::forget('owner.data');
                 \Illuminate\Support\Facades\Cache::forget('owner.fallback');
+                \Illuminate\Support\Facades\Cache::forget('owner-data.transformed');
+
             }
         });
     }

@@ -225,11 +225,14 @@ class Project extends Model
         static::saved(function ($project) {
             \Illuminate\Support\Facades\Cache::forget('projects.all');
             \Illuminate\Support\Facades\Cache::forget("project.{$project->slug}");
+            \Illuminate\Support\Facades\Cache::forget("project.transformed.{$project->slug}");
         });
 
         static::deleted(function ($project) {
             \Illuminate\Support\Facades\Cache::forget('projects.all');
             \Illuminate\Support\Facades\Cache::forget("project.{$project->slug}");
+            \Illuminate\Support\Facades\Cache::forget("project.transformed");
+            \Illuminate\Support\Facades\Cache::forget("project.transformed.{$project->slug}");
         });
     }
 }
