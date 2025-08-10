@@ -39,3 +39,38 @@ services:
 volumes:
     storage:
     public:
+
+
+
+# working ec2 own
+# services:
+#     app:
+#         build:
+#             context: .
+#             dockerfile: Dockerfile
+#         restart: unless-stopped
+#         ports:
+#             - 8081:10000  # Map to port 10000 (from Dockerfile EXPOSE)
+#         env_file:
+#             - .env
+#         volumes:
+#             - storage:/var/www/html/storage:rw
+#             - public:/var/www/html/public:rw
+
+#     queue-worker:
+#         build:
+#             context: .
+#             dockerfile: Dockerfile
+#         restart: unless-stopped
+#         command: php artisan queue:work
+#         environment:
+#             IS_WORKER: "true"
+#         env_file:
+#             - .env
+#         volumes:
+#             - storage:/var/www/html/storage:rw
+#             - public:/var/www/html/public:rw
+
+# volumes:
+#     storage:
+#     public:

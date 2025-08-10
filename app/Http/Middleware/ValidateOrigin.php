@@ -14,6 +14,12 @@ class ValidateOrigin
         // Get allowed origins from environment
         $allowedOrigins = array_filter(explode(',', env('ALLOWED_ORIGINS', '')));
 
+        if (
+            $request->header('X-Bypass-Sitemap') === env('SITEMAP_BYPASS_SECRET')
+        ) {
+            return $next($request);
+        }
+
         // If no origins configured, block all requests
         if (empty($allowedOrigins)) {
             return response()->json(['error' => 'Access denied'], 403);
