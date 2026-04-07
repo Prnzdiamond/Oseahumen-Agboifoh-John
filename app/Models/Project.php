@@ -2,9 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Support\Str;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class Project extends Model
 {
@@ -223,16 +224,18 @@ class Project extends Model
 
         // Clear cache when project is updated (existing code)
         static::saved(function ($project) {
-            \Illuminate\Support\Facades\Cache::forget('projects.all');
-            \Illuminate\Support\Facades\Cache::forget("project.{$project->slug}");
-            \Illuminate\Support\Facades\Cache::forget("project.transformed.{$project->slug}");
+            Cache::forget('projects.all');
+            Cache::forget('projects.transformed');
+            Cache::forget("project.{$project->slug}");
+            Cache::forget("project.transformed.{$project->slug}");
         });
 
         static::deleted(function ($project) {
-            \Illuminate\Support\Facades\Cache::forget('projects.all');
-            \Illuminate\Support\Facades\Cache::forget("project.{$project->slug}");
-            \Illuminate\Support\Facades\Cache::forget("project.transformed");
-            \Illuminate\Support\Facades\Cache::forget("project.transformed.{$project->slug}");
+            Cache::forget('projects.all');
+            Cache::forget('projects.transformed');
+            Cache::forget("project.{$project->slug}");
+            Cache::forget("project.transformed");
+            Cache::forget("project.transformed.{$project->slug}");
         });
     }
 }
