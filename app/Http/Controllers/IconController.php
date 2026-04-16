@@ -10,34 +10,21 @@ class IconController extends Controller
 {
     /**
      * GET /api/icons
+     * GET /api/icons?search=music
+     * GET /api/icons?category=social
      *
-     * Returns the full active icon catalog for the frontend.
-     * The frontend uses this to render Lucide icons by name.
+     * Full catalog is cached forever (busted when any Icon record changes).
+     * Search and category requests bypass cache — they're for the admin picker.
      *
-     * Optional query param: ?search=music
-     * Returns icons whose name or keywords contain the search term.
-     * Used when Phase 2 adds the visual icon picker to Filament.
-     *
-     * Optional query param: ?category=social
-     * Returns icons filtered to a specific category.
-     *
-     * The SVG field is excluded from the public API response —
-     * SVGs are only needed by the Filament admin picker, not the frontend
-     * (the frontend uses @lucide/vue or lucide-react directly).
-     *
-     * Response shape per item:
-     * {
-     *   "name": "gamepad-2",
-     *   "keywords": ["game", "gaming", "controller", "play", "joystick"],
-     *   "category": "gaming"
-     * }
+     * SVGs are included in search results (max 100) so the Filament visual
+     * picker can render live previews. They are NOT included in the full
+     * catalog response (too large — ~1400 SVGs would bloat the response).
      */
     public function index(Request $request)
     {
         $search   = $request->query('search');
         $category = $request->query('category');
 
-        // If searching or filtering by category, bypass cache and query directly
         if ($search || $category) {
             $query = Icon::active();
 
@@ -49,9 +36,10 @@ class IconController extends Controller
                 $query->byCategory($category);
             }
 
+            // Include svg here — the visual picker needs it
             $icons = $query->orderBy('name')
                 ->limit(100)
-                ->get(['name', 'keywords', 'category']);
+                ->get(['name', 'keywords', 'category', 'svg']);
 
             return response()->json([
                 'data'    => $icons,
@@ -60,7 +48,7 @@ class IconController extends Controller
             ]);
         }
 
-        // Full catalog — cached forever, invalidated when any Icon record changes
+        // Full catalog — no SVGs to keep payload small
         $catalog = Cache::rememberForever('icons.catalog', function () {
             return Icon::active()
                 ->orderBy('name')
@@ -76,27 +64,16 @@ class IconController extends Controller
 
     /**
      * GET /api/icons/{name}/svg
-     *
-     * Returns the raw SVG for a single icon by name.
-     * Used by the Filament visual icon picker to render previews.
-     * NOT needed by the public frontend.
-     *
-     * This endpoint is restricted to admin/internal use — add auth
-     * middleware in Phase 2 when the picker is built.
+     * Returns the raw SVG for a single icon.
      */
     public function svg(string $name)
     {
         $icon = Icon::active()->where('name', $name)->first(['name', 'svg']);
 
-        if (!$icon) {
-            return response()->json(['message' => 'Icon not found', 'success' => false], 404);
-        }
-
-        if (!$icon->svg) {
+        if (!$icon || !$icon->svg) {
             return response()->json(['message' => 'SVG not available', 'success' => false], 404);
         }
 
-        // Return as SVG content type for direct embedding
         return response($icon->svg, 200)->header('Content-Type', 'image/svg+xml');
     }
 }

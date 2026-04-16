@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use Filament\Forms;
 use App\Models\User;
+use App\Models\Technology;
 use Filament\Tables;
 use Filament\Forms\Form;
 use Filament\Tables\Table;
@@ -17,20 +18,19 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\Section;
+use Filament\Tables\Columns\BadgeColumn;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use App\Filament\Forms\Components\IconPicker;
 use App\Filament\Resources\OwnerProfileResource\Pages;
-use App\Filament\Resources\OwnerProfileResource\RelationManagers;
 
 class OwnerProfileResource extends Resource
 {
     protected static ?string $model = User::class;
-
-    protected static ?string $navigationIcon = 'heroicon-o-user-circle';
-
+    protected static ?string $navigationIcon  = 'heroicon-o-user-circle';
     protected static ?string $navigationLabel = 'Owner Profile';
-
-    protected static ?string $modelLabel = 'Owner Profile';
+    protected static ?string $modelLabel      = 'Owner Profile';
+    // Speed fix
+    protected static ?string $recordTitleAttribute = 'name';
 
     public static function form(Form $form): Form
     {
@@ -38,12 +38,14 @@ class OwnerProfileResource extends Resource
             ->schema([
                 Section::make('Basic Information')
                     ->schema([
+                        // Speed fix: lazy load prevents Cloudinary blocking the page
                         FileUpload::make('avatar')
                             ->disk('cloudinary')
                             ->directory('avatars')
                             ->image()
                             ->preserveFilenames()
-                            ->columnSpanFull(),
+                            ->columnSpanFull()
+                            ->extraAttributes(['loading' => 'lazy']),
 
                         TextInput::make('name')
                             ->required()
@@ -66,33 +68,46 @@ class OwnerProfileResource extends Resource
 
                 Section::make('Technical Skills')
                     ->schema([
-                        // Tech Stack with ratings and experience
+                        // ── Tech Stack — now DB-driven ────────────────────────
                         Repeater::make('tech_stack')
                             ->label('Tech Stack')
                             ->schema([
-                                TextInput::make('technology')
+                                // Live search against the technologies table
+                                // Type "rust" → Rust appears immediately
+                                // Type "python" → Python + all ecosystem techs
+                                Select::make('technology')
                                     ->required()
-                                    ->placeholder('e.g., PHP, Laravel, React')
-                                    ->datalist([
-                                        'PHP',
-                                        'Laravel',
-                                        'JavaScript',
-                                        'React',
-                                        'Vue.js',
-                                        'Node.js',
-                                        'Python',
-                                        'Django',
-                                        'MySQL',
-                                        'PostgreSQL',
-                                        'MongoDB',
-                                        'Docker',
-                                        'AWS',
-                                        'Git',
-                                        'HTML',
-                                        'CSS',
-                                        'Tailwind CSS',
-                                        'Bootstrap'
-                                    ]),
+                                    ->searchable()
+                                    ->getSearchResultsUsing(function (string $search) {
+                                        return Technology::active()
+                                            ->where('name', 'ilike', "%{$search}%")
+                                            ->orderBy('name')
+                                            ->limit(20)
+                                            ->pluck('name', 'name')
+                                            ->toArray();
+                                    })
+                                    ->getOptionLabelUsing(fn ($value) => $value)
+                                    ->createOptionForm([
+                                        TextInput::make('name')
+                                            ->required()
+                                            ->placeholder('e.g. Zig, SolidJS'),
+                                    ])
+                                    ->createOptionUsing(function (array $data): string {
+                                        Technology::firstOrCreate(
+                                            ['slug' => \Illuminate\Support\Str::slug(
+                                                preg_replace('/[\.\+#]/', '', $data['name'])
+                                            )],
+                                            [
+                                                'name'      => $data['name'],
+                                                'category'  => 'other',
+                                                'is_manual' => true,
+                                                'is_active' => true,
+                                            ]
+                                        );
+                                        return $data['name'];
+                                    })
+                                    ->helperText('Start typing e.g. "rust", "laravel", "python"'),
+
                                 Select::make('rating')
                                     ->label('Skill Level')
                                     ->options([
@@ -100,14 +115,15 @@ class OwnerProfileResource extends Resource
                                         2 => 'Basic',
                                         3 => 'Intermediate',
                                         4 => 'Advanced',
-                                        5 => 'Expert'
+                                        5 => 'Expert',
                                     ])
                                     ->placeholder('Select skill level'),
+
                                 TextInput::make('years_experience')
                                     ->label('Years of Experience')
                                     ->numeric()
                                     ->placeholder('e.g., 3')
-                                    ->suffix('years')
+                                    ->suffix('years'),
                             ])
                             ->defaultItems(1)
                             ->addActionLabel('Add Technology')
@@ -116,27 +132,12 @@ class OwnerProfileResource extends Resource
                             ->cloneable()
                             ->columns(3),
 
-                        // Expertise areas
                         Repeater::make('expertise')
                             ->label('Expertise Areas')
                             ->schema([
                                 TextInput::make('area')
                                     ->required()
-                                    ->placeholder('e.g., Full Stack Development, API Design')
-                                    ->datalist([
-                                        'Full Stack Development',
-                                        'Frontend Development',
-                                        'Backend Development',
-                                        'API Development',
-                                        'Database Design',
-                                        'DevOps',
-                                        'Mobile Development',
-                                        'UI/UX Design',
-                                        'Project Management',
-                                        'System Architecture',
-                                        'Cloud Computing',
-                                        'Microservices'
-                                    ])
+                                    ->placeholder('e.g., Full Stack Development, API Design'),
                             ])
                             ->defaultItems(1)
                             ->addActionLabel('Add Expertise Area')
@@ -151,21 +152,11 @@ class OwnerProfileResource extends Resource
                         Repeater::make('professional_journey')
                             ->label('Professional Journey')
                             ->schema([
-                                TextInput::make('position')
-                                    ->required()
-                                    ->placeholder('e.g., Senior Developer'),
-                                TextInput::make('company')
-                                    ->required()
-                                    ->placeholder('e.g., Tech Company Inc.'),
-                                TextInput::make('period')
-                                    ->required()
-                                    ->placeholder('e.g., 2020 - Present'),
-                                Textarea::make('description')
-                                    ->rows(3)
-                                    ->placeholder('Describe your role and achievements...'),
-                                Toggle::make('is_current')
-                                    ->label('Current Position')
-                                    ->default(false)
+                                TextInput::make('position')->required()->placeholder('e.g., Senior Developer'),
+                                TextInput::make('company')->required()->placeholder('e.g., Tech Company Inc.'),
+                                TextInput::make('period')->required()->placeholder('e.g., 2020 - Present'),
+                                Textarea::make('description')->rows(3)->placeholder('Describe your role and achievements...'),
+                                Toggle::make('is_current')->label('Current Position')->default(false),
                             ])
                             ->defaultItems(1)
                             ->addActionLabel('Add Position')
@@ -183,27 +174,27 @@ class OwnerProfileResource extends Resource
                                 Select::make('platform')
                                     ->label('Platform')
                                     ->options([
-                                        'github' => 'GitHub',
-                                        'linkedin' => 'LinkedIn',
-                                        'twitter' => 'Twitter/X',
+                                        'github'    => 'GitHub',
+                                        'linkedin'  => 'LinkedIn',
+                                        'twitter'   => 'Twitter/X',
                                         'instagram' => 'Instagram',
-                                        'facebook' => 'Facebook',
-                                        'youtube' => 'YouTube',
-                                        'tiktok' => 'TikTok',
-                                        'snapchat' => 'Snapchat',
+                                        'facebook'  => 'Facebook',
+                                        'youtube'   => 'YouTube',
+                                        'tiktok'    => 'TikTok',
+                                        'snapchat'  => 'Snapchat',
                                         'pinterest' => 'Pinterest',
-                                        'reddit' => 'Reddit',
-                                        'medium' => 'Medium',
-                                        'behance' => 'Behance',
-                                        'dribbble' => 'Dribbble',
-                                        'discord' => 'Discord',
-                                        'telegram' => 'Telegram',
-                                        'whatsapp' => 'WhatsApp',
-                                        'skype' => 'Skype',
-                                        'website' => 'Personal Website',
+                                        'reddit'    => 'Reddit',
+                                        'medium'    => 'Medium',
+                                        'behance'   => 'Behance',
+                                        'dribbble'  => 'Dribbble',
+                                        'discord'   => 'Discord',
+                                        'telegram'  => 'Telegram',
+                                        'whatsapp'  => 'WhatsApp',
+                                        'skype'     => 'Skype',
+                                        'website'   => 'Personal Website',
                                         'portfolio' => 'Portfolio',
-                                        'blog' => 'Blog',
-                                        'other' => 'Other'
+                                        'blog'      => 'Blog',
+                                        'other'     => 'Other',
                                     ])
                                     ->required()
                                     ->searchable(),
@@ -212,7 +203,7 @@ class OwnerProfileResource extends Resource
                                     ->url()
                                     ->required()
                                     ->placeholder('https://...')
-                                    ->prefixIcon('heroicon-m-link')
+                                    ->prefixIcon('heroicon-m-link'),
                             ])
                             ->defaultItems(1)
                             ->addActionLabel('Add URL')
@@ -224,7 +215,7 @@ class OwnerProfileResource extends Resource
 
                 Section::make('Personal Information')
                     ->schema([
-                        // Hobbies
+                        // ── Hobbies — now with visual icon picker ─────────────
                         Repeater::make('hobbies')
                             ->label('Hobbies & Interests')
                             ->schema([
@@ -234,8 +225,10 @@ class OwnerProfileResource extends Resource
                                 Textarea::make('description')
                                     ->rows(2)
                                     ->placeholder('Optional description...'),
-                                TextInput::make('icon')
-                                    ->placeholder('📸 (optional emoji or icon)')
+                                // Visual icon picker instead of free-text emoji field
+                                IconPicker::make('icon')
+                                    ->label('Icon')
+                                    ->helperText('Search e.g. "camera", "game", "music", "book"'),
                             ])
                             ->defaultItems(1)
                             ->addActionLabel('Add Hobby')
@@ -244,38 +237,23 @@ class OwnerProfileResource extends Resource
                             ->cloneable()
                             ->columns(3),
 
-                        // Languages
                         Repeater::make('languages')
                             ->label('Languages')
                             ->schema([
                                 TextInput::make('language')
                                     ->required()
-                                    ->placeholder('e.g., English, Spanish')
-                                    ->datalist([
-                                        'English',
-                                        'Spanish',
-                                        'French',
-                                        'German',
-                                        'Portuguese',
-                                        'Italian',
-                                        'Chinese',
-                                        'Japanese',
-                                        'Arabic',
-                                        'Russian'
-                                    ]),
+                                    ->placeholder('e.g., English, Spanish'),
                                 Select::make('proficiency')
                                     ->label('Proficiency Level')
                                     ->options([
-                                        'basic' => 'Basic',
+                                        'basic'          => 'Basic',
                                         'conversational' => 'Conversational',
-                                        'fluent' => 'Fluent',
-                                        'native' => 'Native'
+                                        'fluent'         => 'Fluent',
+                                        'native'         => 'Native',
                                     ])
                                     ->default('conversational')
                                     ->required(),
-                                Toggle::make('is_native')
-                                    ->label('Native Language')
-                                    ->default(false)
+                                Toggle::make('is_native')->label('Native Language')->default(false),
                             ])
                             ->defaultItems(1)
                             ->addActionLabel('Add Language')
@@ -293,26 +271,19 @@ class OwnerProfileResource extends Resource
                                 Select::make('type')
                                     ->label('Contact Type')
                                     ->options([
-                                        'email' => 'Email',
-                                        'phone' => 'Phone',
+                                        'email'    => 'Email',
+                                        'phone'    => 'Phone',
                                         'whatsapp' => 'WhatsApp',
                                         'telegram' => 'Telegram',
-                                        'skype' => 'Skype',
-                                        'discord' => 'Discord',
-                                        'other' => 'Other'
+                                        'skype'    => 'Skype',
+                                        'discord'  => 'Discord',
+                                        'other'    => 'Other',
                                     ])
                                     ->required(),
-                                TextInput::make('value')
-                                    ->required()
-                                    ->placeholder('Contact value...'),
-                                TextInput::make('label')
-                                    ->placeholder('Custom label (optional)'),
-                                Toggle::make('is_primary')
-                                    ->label('Primary Contact')
-                                    ->default(false),
-                                Toggle::make('is_public')
-                                    ->label('Show Publicly')
-                                    ->default(true)
+                                TextInput::make('value')->required()->placeholder('Contact value...'),
+                                TextInput::make('label')->placeholder('Custom label (optional)'),
+                                Toggle::make('is_primary')->label('Primary Contact')->default(false),
+                                Toggle::make('is_public')->label('Show Publicly')->default(true),
                             ])
                             ->defaultItems(1)
                             ->addActionLabel('Add Contact Info')
@@ -333,257 +304,34 @@ class OwnerProfileResource extends Resource
                     ->circular()
                     ->label('Avatar'),
 
-                TextColumn::make('name')
-                    ->searchable()
-                    ->sortable(),
+                TextColumn::make('name')->searchable()->sortable(),
 
                 TextColumn::make('headline')
                     ->limit(50)
-                    ->tooltip(function (TextColumn $column): ?string {
-                        $state = $column->getState();
-                        if (strlen($state) <= 50) {
-                            return null;
-                        }
-                        return $state;
-                    }),
+                    ->tooltip(fn (TextColumn $column): ?string =>
+                        strlen($column->getState()) > 50 ? $column->getState() : null
+                    ),
 
-                // Tech Stack with improved display
                 TextColumn::make('tech_stack')
                     ->label('Tech Stack')
                     ->formatStateUsing(function ($state, $record) {
-                        $techStackData = $record->tech_stack;
-
-                        if (!is_array($techStackData) || empty($techStackData)) {
-                            return 'No technologies';
-                        }
-
-                        $technologies = collect($techStackData)->map(function ($item) {
-                            if (is_array($item) && isset($item['technology']) && !empty($item['technology'])) {
-                                $tech = $item['technology'];
-                                if (isset($item['rating']) && $item['rating']) {
-                                    $stars = str_repeat('⭐', $item['rating']);
-                                    return $tech . ' ' . $stars;
-                                }
-                                return $tech;
-                            }
-                            return null;
-                        })->filter()->values();
-
-                        if ($technologies->isEmpty()) {
-                            return 'No technologies';
-                        }
-
-                        $first = $technologies->first();
-                        $count = $technologies->count();
-
-                        if ($count === 1) {
-                            return $first;
-                        }
-
-                        return $first . " (+" . ($count - 1) . " more)";
+                        $stack = $record->tech_stack;
+                        if (!is_array($stack) || empty($stack)) return 'No technologies';
+                        $techs = collect($stack)
+                            ->map(fn ($item) => is_array($item) ? ($item['technology'] ?? null) : $item)
+                            ->filter()->values();
+                        if ($techs->isEmpty()) return 'No technologies';
+                        return $techs->first() . ($techs->count() > 1 ? " (+{$techs->count()} more)" : '');
                     })
-                    ->tooltip(function ($record) {
-                        if (!is_array($record->tech_stack) || empty($record->tech_stack)) {
-                            return null;
-                        }
-
-                        $technologies = collect($record->tech_stack)->map(function ($item) {
-                            if (is_array($item) && isset($item['technology']) && !empty($item['technology'])) {
-                                $tech = $item['technology'];
-                                $details = [];
-                                if (isset($item['rating']) && $item['rating']) {
-                                    $details[] = 'Level: ' . $item['rating'] . '/5';
-                                }
-                                if (isset($item['years_experience']) && $item['years_experience']) {
-                                    $details[] = 'Experience: ' . $item['years_experience'] . ' years';
-                                }
-                                return $tech . (!empty($details) ? ' (' . implode(', ', $details) . ')' : '');
-                            }
-                            return null;
-                        })->filter()->values();
-
-                        return $technologies->join("\n");
-                    })
+                    ->tooltip(fn ($record) => is_array($record->tech_stack)
+                        ? collect($record->tech_stack)
+                            ->map(fn ($item) => is_array($item) ? ($item['technology'] ?? '') : $item)
+                            ->filter()->join(', ')
+                        : null
+                    )
                     ->searchable(),
-
-                // Professional Journey
-                TextColumn::make('professional_journey')
-                    ->label('Current Role')
-                    ->formatStateUsing(function ($state, $record) {
-                        $journey = $record->professional_journey;
-
-                        if (!is_array($journey) || empty($journey)) {
-                            return 'No experience listed';
-                        }
-
-                        // Find current position or latest position
-                        $current = collect($journey)->first(function ($item) {
-                            return is_array($item) && ($item['is_current'] ?? false);
-                        });
-
-                        if (!$current) {
-                            $current = collect($journey)->first();
-                        }
-
-                        if (!$current) {
-                            return 'No experience listed';
-                        }
-
-                        $position = $current['position'] ?? '';
-                        $company = $current['company'] ?? '';
-
-                        if ($position && $company) {
-                            return $position . ' at ' . $company;
-                        }
-
-                        return $position ?: $company ?: 'No position listed';
-                    })
-                    ->tooltip(function ($record) {
-                        if (!is_array($record->professional_journey) || empty($record->professional_journey)) {
-                            return null;
-                        }
-
-                        $positions = collect($record->professional_journey)->map(function ($item) {
-                            if (!is_array($item))
-                                return null;
-
-                            $position = $item['position'] ?? '';
-                            $company = $item['company'] ?? '';
-                            $period = $item['period'] ?? '';
-                            $current = $item['is_current'] ?? false;
-
-                            $line = '';
-                            if ($position)
-                                $line .= $position;
-                            if ($company)
-                                $line .= ($line ? ' at ' : '') . $company;
-                            if ($period)
-                                $line .= ($line ? ' (' : '(') . $period . ')';
-                            if ($current)
-                                $line .= ' - Current';
-
-                            return $line ?: null;
-                        })->filter()->values();
-
-                        return $positions->join("\n");
-                    }),
-
-                // Languages
-                TextColumn::make('languages')
-                    ->label('Languages')
-                    ->formatStateUsing(function ($state, $record) {
-                        $languages = $record->languages;
-
-                        if (!is_array($languages) || empty($languages)) {
-                            return 'Not specified';
-                        }
-
-                        $langList = collect($languages)->map(function ($item) {
-                            if (is_array($item) && isset($item['language']) && !empty($item['language'])) {
-                                $lang = $item['language'];
-                                if ($item['is_native'] ?? false) {
-                                    return $lang . ' (Native)';
-                                }
-                                return $lang;
-                            }
-                            return null;
-                        })->filter()->values();
-
-                        if ($langList->isEmpty()) {
-                            return 'Not specified';
-                        }
-
-                        $first = $langList->first();
-                        $count = $langList->count();
-
-                        if ($count === 1) {
-                            return $first;
-                        }
-
-                        return $first . " (+" . ($count - 1) . " more)";
-                    })
-                    ->tooltip(function ($record) {
-                        if (!is_array($record->languages) || empty($record->languages)) {
-                            return null;
-                        }
-
-                        $languages = collect($record->languages)->map(function ($item) {
-                            if (is_array($item) && isset($item['language']) && !empty($item['language'])) {
-                                $lang = $item['language'];
-                                $proficiency = $item['proficiency'] ?? 'conversational';
-                                $native = $item['is_native'] ?? false;
-
-                                return $lang . ' (' . ucfirst($proficiency) . ($native ? ', Native' : '') . ')';
-                            }
-                            return null;
-                        })->filter()->values();
-
-                        return $languages->join("\n");
-                    }),
-
-                // URLs with platform icons
-                TextColumn::make('urls')
-                    ->label('Links')
-                    ->formatStateUsing(function ($state, $record) {
-                        $urlsData = $record->urls;
-
-                        if (!is_array($urlsData) || empty($urlsData)) {
-                            return 'No links';
-                        }
-
-                        $icons = [
-                            'github' => '🐙',
-                            'linkedin' => '💼',
-                            'twitter' => '🐦',
-                            'website' => '🌐',
-                            'portfolio' => '💼',
-                            'blog' => '📝',
-                            'youtube' => '📺',
-                            'instagram' => '📷',
-                            'other' => '🔗'
-                        ];
-
-                        $links = collect($urlsData)->filter(function ($item) {
-                            return is_array($item) && isset($item['platform']) && !empty($item['platform']) && isset($item['url']) && !empty($item['url']);
-                        });
-
-                        if ($links->isEmpty()) {
-                            return 'No links';
-                        }
-
-                        $first = $links->first();
-                        $platform = $first['platform'];
-                        $icon = $icons[$platform] ?? '🔗';
-                        $displayText = $icon . ' ' . ucfirst($platform);
-
-                        $count = $links->count();
-                        if ($count === 1) {
-                            return $displayText;
-                        }
-
-                        return $displayText . " (+" . ($count - 1) . " more)";
-                    })
-                    ->tooltip(function ($record) {
-                        if (!is_array($record->urls) || empty($record->urls)) {
-                            return null;
-                        }
-
-                        $links = collect($record->urls)
-                            ->filter(function ($item) {
-                                return is_array($item) && isset($item['platform']) && !empty($item['platform']) && isset($item['url']) && !empty($item['url']);
-                            })
-                            ->map(function ($item) {
-                                $platform = $item['platform'];
-                                return ucfirst($platform) . ': ' . $item['url'];
-                            });
-
-                        return $links->join("\n");
-                    })
-                    ->html(),
             ])
-            ->filters([
-                // Add filters for tech stack, expertise, etc.
-            ])
+            ->filters([])
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
@@ -593,22 +341,22 @@ class OwnerProfileResource extends Resource
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
-            ]);
+            ])
+            // Speed fix: explicit pagination
+            ->defaultPaginationPageOption(10);  
     }
 
     public static function getRelations(): array
     {
-        return [
-            //
-        ];
+        return [];
     }
 
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListOwnerProfiles::route('/'),
+            'index'  => Pages\ListOwnerProfiles::route('/'),
             'create' => Pages\CreateOwnerProfile::route('/create'),
-            'edit' => Pages\EditOwnerProfile::route('/{record}/edit'),
+            'edit'   => Pages\EditOwnerProfile::route('/{record}/edit'),
         ];
     }
 
