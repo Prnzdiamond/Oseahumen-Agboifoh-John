@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use Filament\Forms;
 use Filament\Tables;
 use App\Models\Project;
+use App\Models\Technology;
 use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
@@ -21,15 +22,15 @@ use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\BooleanColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Builder;
+use App\Filament\Forms\Components\IconPicker;
 use App\Filament\Resources\ProjectResource\Pages;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\ProjectResource\RelationManagers;
 
 class ProjectResource extends Resource
 {
     protected static ?string $model = Project::class;
-
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    // Speed fix: helps Filament resolve breadcrumbs/nav without an extra query
+    protected static ?string $recordTitleAttribute = 'title';
 
     public static function form(Form $form): Form
     {
@@ -42,7 +43,7 @@ class ProjectResource extends Resource
                             ->maxLength(255)
                             ->live(onBlur: true)
                             ->afterStateUpdated(
-                                fn(string $context, $state, callable $set) =>
+                                fn (string $context, $state, callable $set) =>
                                 $context === 'create' ? $set('slug', \Illuminate\Support\Str::slug($state)) : null
                             ),
                         Textarea::make('description')
@@ -52,11 +53,11 @@ class ProjectResource extends Resource
 
                         Select::make('status')
                             ->options([
-                                'planning' => 'Planning',
+                                'planning'    => 'Planning',
                                 'in_progress' => 'In Progress',
-                                'completed' => 'Completed',
-                                'on_hold' => 'On Hold',
-                                'cancelled' => 'Cancelled',
+                                'completed'   => 'Completed',
+                                'on_hold'     => 'On Hold',
+                                'cancelled'   => 'Cancelled',
                             ])
                             ->default('planning')
                             ->required(),
@@ -64,13 +65,13 @@ class ProjectResource extends Resource
                         Select::make('type')
                             ->options([
                                 'web_application' => 'Web Application',
-                                'mobile_app' => 'Mobile App',
-                                'desktop_app' => 'Desktop App',
-                                'api' => 'API',
-                                'library' => 'Library',
-                                'tool' => 'Tool',
-                                'game' => 'Game',
-                                'other' => 'Other',
+                                'mobile_app'      => 'Mobile App',
+                                'desktop_app'     => 'Desktop App',
+                                'api'             => 'API',
+                                'library'         => 'Library',
+                                'tool'            => 'Tool',
+                                'game'            => 'Game',
+                                'other'           => 'Other',
                             ])
                             ->default('web_application')
                             ->required(),
@@ -83,19 +84,22 @@ class ProjectResource extends Resource
 
                 Forms\Components\Section::make('Media')
                     ->schema([
+                        // Speed fix: lazy loading prevents blocking page render
                         FileUpload::make('image')
                             ->label('Main Image')
                             ->image()
                             ->directory('project-main-images')
                             ->disk('cloudinary')
-                            ->nullable(),
+                            ->nullable()
+                            ->extraAttributes(['loading' => 'lazy']),
 
                         FileUpload::make('cover_image')
                             ->label('Cover Image')
                             ->image()
                             ->directory('project-covers')
                             ->disk('cloudinary')
-                            ->nullable(),
+                            ->nullable()
+                            ->extraAttributes(['loading' => 'lazy']),
                     ])
                     ->columns(2),
 
@@ -119,51 +123,62 @@ class ProjectResource extends Resource
                     ])
                     ->columns(3),
 
+                // ── Technologies — now fully DB-driven ────────────────────────
                 Forms\Components\Section::make('Technologies')
                     ->schema([
                         Select::make('technologies')
                             ->label('Technologies Used')
                             ->multiple()
                             ->searchable()
+                            ->columnSpanFull()
+
+                            // Live search against the technologies table
+                            // Type "rust" → Rust appears. Type "python" → all Python
+                            // ecosystem techs appear. No hardcoded list ever again.
+                            ->getSearchResultsUsing(function (string $search) {
+                                return Technology::active()
+                                    ->where(function ($q) use ($search) {
+                                        $q->where('name', 'ilike', "%{$search}%")
+                                          ->orWhere('category', 'ilike', "%{$search}%");
+                                    })
+                                    ->orderBy('name')
+                                    ->limit(30)
+                                    ->pluck('name', 'name')
+                                    ->toArray();
+                            })
+
+                            // When editing, show existing values as their own labels
+                            ->getOptionLabelsUsing(fn (array $values) =>
+                                collect($values)->mapWithKeys(fn ($v) => [$v => $v])->toArray()
+                            )
+
+                            // Allow adding a tech that isn't in the catalog yet
+                            // It gets created as a manual entry so it appears in
+                            // future searches and the daily sync won't delete it
                             ->createOptionForm([
-                                TextInput::make('technology')
+                                TextInput::make('name')
                                     ->required()
-                                    ->placeholder('e.g., Laravel, React, Vue.js')
+                                    ->label('Technology Name')
+                                    ->placeholder('e.g. SolidJS, Bun, Zig'),
                             ])
                             ->createOptionUsing(function (array $data): string {
-                                return $data['technology'];
+                                Technology::firstOrCreate(
+                                    ['slug' => \Illuminate\Support\Str::slug(
+                                        preg_replace('/[\.\+#]/', '', $data['name'])
+                                    )],
+                                    [
+                                        'name'      => $data['name'],
+                                        'category'  => 'other',
+                                        'is_manual' => true,
+                                        'is_active' => true,
+                                    ]
+                                );
+                                return $data['name'];
                             })
-                            ->options([
-                                'PHP' => 'PHP',
-                                'Laravel' => 'Laravel',
-                                'JavaScript' => 'JavaScript',
-                                'React' => 'React',
-                                'Vue.js' => 'Vue.js',
-                                'Angular' => 'Angular',
-                                'Node.js' => 'Node.js',
-                                'Python' => 'Python',
-                                'Django' => 'Django',
-                                'Flask' => 'Flask',
-                                'MySQL' => 'MySQL',
-                                'PostgreSQL' => 'PostgreSQL',
-                                'MongoDB' => 'MongoDB',
-                                'Redis' => 'Redis',
-                                'Docker' => 'Docker',
-                                'AWS' => 'AWS',
-                                'Git' => 'Git',
-                                'HTML' => 'HTML',
-                                'CSS' => 'CSS',
-                                'Tailwind CSS' => 'Tailwind CSS',
-                                'Bootstrap' => 'Bootstrap',
-                                'SASS' => 'SASS',
-                                'TypeScript' => 'TypeScript',
-                                'Next.js' => 'Next.js',
-                                'Nuxt.js' => 'Nuxt.js',
-                            ])
-                            ->preload()
-                            ->columnSpanFull(),
+                            ->helperText('Search by name (e.g. "laravel") or category (e.g. "python"). Can\'t find it? Use "Create new".'),
                     ]),
 
+                // ── Key Features — with visual icon picker ────────────────────
                 Forms\Components\Section::make('Key Features')
                     ->schema([
                         Repeater::make('key_features')
@@ -179,10 +194,10 @@ class ProjectResource extends Resource
                                     ->placeholder('Describe this feature in detail')
                                     ->rows(2),
 
-                                TextInput::make('icon')
-                                    ->label('Icon (optional)')
-                                    ->placeholder('e.g., heroicon-o-bell, fas fa-bell')
-                                    ->helperText('Icon class name or emoji'),
+                                // Visual icon picker — searches the icons table
+                                IconPicker::make('icon')
+                                    ->label('Feature Icon')
+                                    ->helperText('Search by keyword e.g. "bell", "chart", "shield"'),
                             ])
                             ->defaultItems(0)
                             ->addActionLabel('Add Feature')
@@ -201,11 +216,11 @@ class ProjectResource extends Resource
                                 Select::make('platform')
                                     ->label('Platform')
                                     ->options([
-                                        'github' => 'GitHub',
-                                        'gitlab' => 'GitLab',
+                                        'github'    => 'GitHub',
+                                        'gitlab'    => 'GitLab',
                                         'bitbucket' => 'Bitbucket',
-                                        'codeberg' => 'Codeberg',
-                                        'other' => 'Other',
+                                        'codeberg'  => 'Codeberg',
+                                        'other'     => 'Other',
                                     ])
                                     ->default('github')
                                     ->required(),
@@ -218,7 +233,7 @@ class ProjectResource extends Resource
 
                                 TextInput::make('label')
                                     ->label('Custom Label (optional)')
-                                    ->placeholder('e.g., Frontend, Backend, Main Repository'),
+                                    ->placeholder('e.g., Frontend, Backend'),
 
                                 TextInput::make('branch')
                                     ->label('Default Branch')
@@ -258,46 +273,37 @@ class ProjectResource extends Resource
 
                 BadgeColumn::make('status')
                     ->colors([
-                        'success' => 'completed',
-                        'primary' => 'in_progress',
-                        'warning' => 'planning',
+                        'success'   => 'completed',
+                        'primary'   => 'in_progress',
+                        'warning'   => 'planning',
                         'secondary' => 'on_hold',
-                        'danger' => 'cancelled',
+                        'danger'    => 'cancelled',
                     ])
-                    ->formatStateUsing(fn(string $state): string => ucwords(str_replace('_', ' ', $state))),
+                    ->formatStateUsing(fn (string $state): string => ucwords(str_replace('_', ' ', $state))),
 
                 BadgeColumn::make('type')
                     ->colors([
-                        'primary' => 'web_application',
+                        'primary'   => 'web_application',
                         'secondary' => 'mobile_app',
-                        'success' => 'api',
-                        'warning' => 'library',
-                        'info' => 'tool',
-                        'pink' => 'game',
-                        'gray' => 'other',
+                        'success'   => 'api',
+                        'warning'   => 'library',
+                        'info'      => 'tool',
+                        'pink'      => 'game',
+                        'gray'      => 'other',
                     ])
-                    ->formatStateUsing(fn(string $state): string => ucwords(str_replace('_', ' ', $state))),
+                    ->formatStateUsing(fn (string $state): string => ucwords(str_replace('_', ' ', $state))),
 
                 TextColumn::make('technologies')
                     ->label('Tech Stack')
                     ->formatStateUsing(function ($state) {
-                        if (!is_array($state) || empty($state)) {
-                            return 'No technologies';
-                        }
-
+                        if (!is_array($state) || empty($state)) return 'No technologies';
                         $count = count($state);
-                        if ($count === 1) {
-                            return $state[0];
-                        }
-
-                        return $state[0] . " (+" . ($count - 1) . " more)";
+                        return $state[0] . ($count > 1 ? " (+{$count} more)" : '');
                     })
-                    ->tooltip(function ($record) {
-                        if (!is_array($record->technologies) || empty($record->technologies)) {
-                            return null;
-                        }
-                        return implode(', ', $record->technologies);
-                    }),
+                    ->tooltip(fn ($record) => is_array($record->technologies)
+                        ? implode(', ', $record->technologies)
+                        : null
+                    ),
 
                 BooleanColumn::make('is_featured')
                     ->label('Featured')
@@ -318,27 +324,23 @@ class ProjectResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                SelectFilter::make('status')
-                    ->options([
-                        'planning' => 'Planning',
-                        'in_progress' => 'In Progress',
-                        'completed' => 'Completed',
-                        'on_hold' => 'On Hold',
-                        'cancelled' => 'Cancelled',
-                    ]),
-
-                SelectFilter::make('type')
-                    ->options([
-                        'web_application' => 'Web Application',
-                        'mobile_app' => 'Mobile App',
-                        'desktop_app' => 'Desktop App',
-                        'api' => 'API',
-                        'library' => 'Library',
-                        'tool' => 'Tool',
-                        'game' => 'Game',
-                        'other' => 'Other',
-                    ]),
-
+                SelectFilter::make('status')->options([
+                    'planning'    => 'Planning',
+                    'in_progress' => 'In Progress',
+                    'completed'   => 'Completed',
+                    'on_hold'     => 'On Hold',
+                    'cancelled'   => 'Cancelled',
+                ]),
+                SelectFilter::make('type')->options([
+                    'web_application' => 'Web Application',
+                    'mobile_app'      => 'Mobile App',
+                    'desktop_app'     => 'Desktop App',
+                    'api'             => 'API',
+                    'library'         => 'Library',
+                    'tool'            => 'Tool',
+                    'game'            => 'Game',
+                    'other'           => 'Other',
+                ]),
                 Tables\Filters\TernaryFilter::make('is_featured')
                     ->label('Featured Projects')
                     ->placeholder('All projects')
@@ -355,7 +357,8 @@ class ProjectResource extends Resource
                     Tables\Actions\DeleteBulkAction::make(),
                 ]),
             ])
-            ->defaultSort('created_at', 'desc');
+            ->defaultSort('created_at', 'desc')
+            ->defaultPaginationPageOption(10);
     }
 
     public static function getRelations(): array
@@ -368,9 +371,15 @@ class ProjectResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index' => Pages\ListProjects::route('/'),
+            'index'  => Pages\ListProjects::route('/'),
             'create' => Pages\CreateProject::route('/create'),
-            'edit' => Pages\EditProject::route('/{record}/edit'),
+            'edit'   => Pages\EditProject::route('/{record}/edit'),
         ];
+    }
+
+    // Speed fix: eager load images so the table doesn't N+1 on image column
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->with('images');
     }
 }
