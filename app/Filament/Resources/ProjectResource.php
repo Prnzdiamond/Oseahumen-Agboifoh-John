@@ -18,6 +18,7 @@ use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\TagsInput;
 use Filament\Tables\Columns\BadgeColumn;
 use Filament\Tables\Columns\BooleanColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -29,7 +30,6 @@ class ProjectResource extends Resource
 {
     protected static ?string $model = Project::class;
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
-    // Speed fix: helps Filament resolve breadcrumbs/nav without an extra query
     protected static ?string $recordTitleAttribute = 'title';
 
     public static function form(Form $form): Form
@@ -84,7 +84,6 @@ class ProjectResource extends Resource
 
                 Forms\Components\Section::make('Media')
                     ->schema([
-                        // Speed fix: lazy loading prevents blocking page render
                         FileUpload::make('image')
                             ->label('Main Image')
                             ->image()
@@ -123,7 +122,90 @@ class ProjectResource extends Resource
                     ])
                     ->columns(3),
 
-                // ── Technologies — now fully DB-driven ────────────────────────
+                // ── Categorisation — new section ──────────────────────────────
+                // Industry tells the world what domain this project serves.
+                // Tags tell the world what features/capabilities it has.
+                // Both are used as the context axis in URL filtering:
+                //   /laravel/real-estate  →  Laravel projects in real estate
+                //   /python/live-chat     →  Python projects with live chat
+                Forms\Components\Section::make('Categorisation')
+                    ->description('Used for the context filter axis: /laravel/real-estate, /python/live-chat etc.')
+                    ->schema([
+                        Select::make('industry')
+                            ->label('Industry / Domain')
+                            ->nullable()
+                            ->searchable()
+                            ->createOptionForm([
+                                TextInput::make('industry')
+                                    ->required()
+                                    ->placeholder('e.g. prop-tech, climate-tech, logistics'),
+                            ])
+                            ->createOptionUsing(fn (array $data): string => \Illuminate\Support\Str::slug($data['industry']))
+                            ->options(fn () => \App\Models\Project::select('industry')
+                                ->whereNotNull('industry')
+                                ->distinct()
+                                ->orderBy('industry')
+                                ->pluck('industry', 'industry')
+                                ->toArray()
+                                // Merge with a sensible default list so new installs
+                                // have options without requiring existing projects
+                                + [
+                                    'e-commerce'    => 'E-Commerce',
+                                    'real-estate'   => 'Real Estate',
+                                    'fintech'       => 'Fintech',
+                                    'healthcare'    => 'Healthcare',
+                                    'education'     => 'Education',
+                                    'saas'          => 'SaaS',
+                                    'ai-ml'         => 'AI / ML',
+                                    'gaming'        => 'Gaming',
+                                    'social'        => 'Social',
+                                    'productivity'  => 'Productivity',
+                                    'entertainment' => 'Entertainment',
+                                    'other'         => 'Other',
+                                ]
+                            )
+                            ->helperText('The primary domain this project lives in. Can add new ones with "Create".'),
+
+                        TagsInput::make('tags')
+                            ->label('Feature Tags')
+                            ->nullable()
+                            ->placeholder('Type a tag and press Enter  e.g. live-chat')
+                            ->suggestions([
+                                'live-chat',
+                                'websockets',
+                                'real-time',
+                                'payment',
+                                'authentication',
+                                'dashboard',
+                                'donation',
+                                'notifications',
+                                'map',
+                                'ai',
+                                'api-integration',
+                                'file-upload',
+                                'search',
+                                'multi-tenant',
+                                'subscriptions',
+                                'admin-panel',
+                                'mobile-responsive',
+                                'pwa',
+                                'dark-mode',
+                                'email',
+                                'sms',
+                                'oauth',
+                                'two-factor',
+                                'analytics',
+                            ])
+                            ->columnSpanFull()
+                            ->helperText(
+                                'Short URL-safe slugs describing key capabilities. ' .
+                                'Used in filter URLs: /laravel/live-chat,payment. ' .
+                                'Use lowercase with hyphens — no spaces.'
+                            ),
+                    ])
+                    ->columns(2),
+
+                // ── Technologies ──────────────────────────────────────────────
                 Forms\Components\Section::make('Technologies')
                     ->schema([
                         Select::make('technologies')
@@ -131,10 +213,6 @@ class ProjectResource extends Resource
                             ->multiple()
                             ->searchable()
                             ->columnSpanFull()
-
-                            // Live search against the technologies table
-                            // Type "rust" → Rust appears. Type "python" → all Python
-                            // ecosystem techs appear. No hardcoded list ever again.
                             ->getSearchResultsUsing(function (string $search) {
                                 return Technology::active()
                                     ->where(function ($q) use ($search) {
@@ -146,15 +224,9 @@ class ProjectResource extends Resource
                                     ->pluck('name', 'name')
                                     ->toArray();
                             })
-
-                            // When editing, show existing values as their own labels
                             ->getOptionLabelsUsing(fn (array $values) =>
                                 collect($values)->mapWithKeys(fn ($v) => [$v => $v])->toArray()
                             )
-
-                            // Allow adding a tech that isn't in the catalog yet
-                            // It gets created as a manual entry so it appears in
-                            // future searches and the daily sync won't delete it
                             ->createOptionForm([
                                 TextInput::make('name')
                                     ->required()
@@ -178,7 +250,7 @@ class ProjectResource extends Resource
                             ->helperText('Search by name (e.g. "laravel") or category (e.g. "python"). Can\'t find it? Use "Create new".'),
                     ]),
 
-                // ── Key Features — with visual icon picker ────────────────────
+                // ── Key Features ──────────────────────────────────────────────
                 Forms\Components\Section::make('Key Features')
                     ->schema([
                         Repeater::make('key_features')
@@ -188,13 +260,10 @@ class ProjectResource extends Resource
                                     ->label('Feature Title')
                                     ->required()
                                     ->placeholder('e.g., Real-time notifications'),
-
                                 Textarea::make('description')
                                     ->label('Feature Description')
                                     ->placeholder('Describe this feature in detail')
                                     ->rows(2),
-
-                                // Visual icon picker — searches the icons table
                                 IconPicker::make('icon')
                                     ->label('Feature Icon')
                                     ->helperText('Search by keyword e.g. "bell", "chart", "shield"'),
@@ -208,6 +277,7 @@ class ProjectResource extends Resource
                             ->columnSpanFull(),
                     ]),
 
+                // ── Source Code ───────────────────────────────────────────────
                 Forms\Components\Section::make('Source Code')
                     ->schema([
                         Repeater::make('source_code')
@@ -224,22 +294,18 @@ class ProjectResource extends Resource
                                     ])
                                     ->default('github')
                                     ->required(),
-
                                 TextInput::make('url')
                                     ->label('Repository URL')
                                     ->url()
                                     ->required()
                                     ->placeholder('https://github.com/username/repo'),
-
                                 TextInput::make('label')
                                     ->label('Custom Label (optional)')
                                     ->placeholder('e.g., Frontend, Backend'),
-
                                 TextInput::make('branch')
                                     ->label('Default Branch')
                                     ->default('main')
                                     ->placeholder('main, master, develop'),
-
                                 Toggle::make('is_public')
                                     ->label('Public Repository')
                                     ->default(true),
@@ -293,6 +359,15 @@ class ProjectResource extends Resource
                     ])
                     ->formatStateUsing(fn (string $state): string => ucwords(str_replace('_', ' ', $state))),
 
+                // ── New: industry column ──────────────────────────────────────
+                TextColumn::make('industry')
+                    ->label('Industry')
+                    ->badge()
+                    ->color('info')
+                    ->formatStateUsing(fn ($state) => $state ? ucwords(str_replace('-', ' ', $state)) : '—')
+                    ->sortable()
+                    ->toggleable(),
+
                 TextColumn::make('technologies')
                     ->label('Tech Stack')
                     ->formatStateUsing(function ($state) {
@@ -341,6 +416,18 @@ class ProjectResource extends Resource
                     'game'            => 'Game',
                     'other'           => 'Other',
                 ]),
+                // ── New: filter by industry ───────────────────────────────────
+                SelectFilter::make('industry')
+                    ->label('Industry')
+                    ->options(fn () => \App\Models\Project::select('industry')
+                        ->whereNotNull('industry')
+                        ->distinct()
+                        ->orderBy('industry')
+                        ->pluck('industry', 'industry')
+                        ->map(fn ($v) => ucwords(str_replace('-', ' ', $v)))
+                        ->toArray()
+                    )
+                    ->searchable(),
                 Tables\Filters\TernaryFilter::make('is_featured')
                     ->label('Featured Projects')
                     ->placeholder('All projects')
@@ -377,7 +464,6 @@ class ProjectResource extends Resource
         ];
     }
 
-    // Speed fix: eager load images so the table doesn't N+1 on image column
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()->with('images');
