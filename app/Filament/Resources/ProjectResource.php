@@ -375,11 +375,15 @@ class ProjectResource extends Resource
 
                 TextColumn::make('technologies')
                     ->label('Tech Stack')
-                    ->formatStateUsing(function ($state) {
-                        if (!is_array($state) || empty($state))
+                    ->formatStateUsing(function ($state, $record) {
+                        $techs = $record->technologies ?? [];
+                        if (is_string($techs)) {
+                            $techs = json_decode($techs, true) ?? [];
+                        }
+                        if (empty($techs))
                             return 'No technologies';
-                        $count = count($state);
-                        return $state[0] . ($count > 1 ? " (+{$count} more)" : '');
+                        $count = count($techs);
+                        return $techs[0] . ($count > 1 ? " (+{$count} more)" : '');
                     })
                     ->tooltip(
                         fn($record) => is_array($record->technologies)
