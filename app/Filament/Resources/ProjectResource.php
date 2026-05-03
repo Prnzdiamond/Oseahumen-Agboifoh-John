@@ -6,6 +6,7 @@ use Filament\Forms;
 use Filament\Tables;
 use App\Models\Project;
 use App\Models\Technology;
+use App\Models\Technology;
 use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
@@ -24,12 +25,15 @@ use Filament\Tables\Columns\BooleanColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Database\Eloquent\Builder;
 use App\Filament\Forms\Components\IconPicker;
+use App\Filament\Forms\Components\IconPicker;
 use App\Filament\Resources\ProjectResource\Pages;
 
 class ProjectResource extends Resource
 {
     protected static ?string $model = Project::class;
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static ?string $recordTitleAttribute = 'title';
+    // Speed fix: helps Filament resolve breadcrumbs/nav without an extra query
     protected static ?string $recordTitleAttribute = 'title';
 
     public static function form(Form $form): Form
@@ -44,6 +48,7 @@ class ProjectResource extends Resource
                             ->live(onBlur: true)
                             ->afterStateUpdated(
                                 fn (string $context, $state, callable $set) =>
+                                fn (string $context, $state, callable $set) =>
                                 $context === 'create' ? $set('slug', \Illuminate\Support\Str::slug($state)) : null
                             ),
                         Textarea::make('description')
@@ -54,7 +59,11 @@ class ProjectResource extends Resource
                         Select::make('status')
                             ->options([
                                 'planning'    => 'Planning',
+                                'planning'    => 'Planning',
                                 'in_progress' => 'In Progress',
+                                'completed'   => 'Completed',
+                                'on_hold'     => 'On Hold',
+                                'cancelled'   => 'Cancelled',
                                 'completed'   => 'Completed',
                                 'on_hold'     => 'On Hold',
                                 'cancelled'   => 'Cancelled',
@@ -65,6 +74,13 @@ class ProjectResource extends Resource
                         Select::make('type')
                             ->options([
                                 'web_application' => 'Web Application',
+                                'mobile_app'      => 'Mobile App',
+                                'desktop_app'     => 'Desktop App',
+                                'api'             => 'API',
+                                'library'         => 'Library',
+                                'tool'            => 'Tool',
+                                'game'            => 'Game',
+                                'other'           => 'Other',
                                 'mobile_app'      => 'Mobile App',
                                 'desktop_app'     => 'Desktop App',
                                 'api'             => 'API',
@@ -84,11 +100,14 @@ class ProjectResource extends Resource
 
                 Forms\Components\Section::make('Media')
                     ->schema([
+                        // Speed fix: lazy loading prevents blocking page render
                         FileUpload::make('image')
                             ->label('Main Image')
                             ->image()
                             ->directory('project-main-images')
                             ->disk('cloudinary')
+                            ->nullable()
+                            ->extraAttributes(['loading' => 'lazy']),
                             ->nullable()
                             ->extraAttributes(['loading' => 'lazy']),
 
@@ -97,6 +116,8 @@ class ProjectResource extends Resource
                             ->image()
                             ->directory('project-covers')
                             ->disk('cloudinary')
+                            ->nullable()
+                            ->extraAttributes(['loading' => 'lazy']),
                             ->nullable()
                             ->extraAttributes(['loading' => 'lazy']),
                     ])
@@ -206,6 +227,7 @@ class ProjectResource extends Resource
                     ->columns(2),
 
                 // ── Technologies ──────────────────────────────────────────────
+                // ── Technologies — now fully DB-driven ────────────────────────
                 Forms\Components\Section::make('Technologies')
                     ->schema([
                         Select::make('technologies')
@@ -227,9 +249,37 @@ class ProjectResource extends Resource
                             ->getOptionLabelsUsing(fn (array $values) =>
                                 collect($values)->mapWithKeys(fn ($v) => [$v => $v])->toArray()
                             )
+                            ->columnSpanFull()
+
+                            // Live search against the technologies table
+                            // Type "rust" → Rust appears. Type "python" → all Python
+                            // ecosystem techs appear. No hardcoded list ever again.
+                            ->getSearchResultsUsing(function (string $search) {
+                                return Technology::active()
+                                    ->where(function ($q) use ($search) {
+                                        $q->where('name', 'ilike', "%{$search}%")
+                                          ->orWhere('category', 'ilike', "%{$search}%");
+                                    })
+                                    ->orderBy('name')
+                                    ->limit(30)
+                                    ->pluck('name', 'name')
+                                    ->toArray();
+                            })
+
+                            // When editing, show existing values as their own labels
+                            ->getOptionLabelsUsing(fn (array $values) =>
+                                collect($values)->mapWithKeys(fn ($v) => [$v => $v])->toArray()
+                            )
+
+                            // Allow adding a tech that isn't in the catalog yet
+                            // It gets created as a manual entry so it appears in
+                            // future searches and the daily sync won't delete it
                             ->createOptionForm([
                                 TextInput::make('name')
+                                TextInput::make('name')
                                     ->required()
+                                    ->label('Technology Name')
+                                    ->placeholder('e.g. SolidJS, Bun, Zig'),
                                     ->label('Technology Name')
                                     ->placeholder('e.g. SolidJS, Bun, Zig'),
                             ])
@@ -288,7 +338,11 @@ class ProjectResource extends Resource
                                     ->options([
                                         'github'    => 'GitHub',
                                         'gitlab'    => 'GitLab',
+                                        'github'    => 'GitHub',
+                                        'gitlab'    => 'GitLab',
                                         'bitbucket' => 'Bitbucket',
+                                        'codeberg'  => 'Codeberg',
+                                        'other'     => 'Other',
                                         'codeberg'  => 'Codeberg',
                                         'other'     => 'Other',
                                     ])
@@ -342,15 +396,26 @@ class ProjectResource extends Resource
                         'success'   => 'completed',
                         'primary'   => 'in_progress',
                         'warning'   => 'planning',
+                        'success'   => 'completed',
+                        'primary'   => 'in_progress',
+                        'warning'   => 'planning',
                         'secondary' => 'on_hold',
                         'danger'    => 'cancelled',
+                        'danger'    => 'cancelled',
                     ])
+                    ->formatStateUsing(fn (string $state): string => ucwords(str_replace('_', ' ', $state))),
                     ->formatStateUsing(fn (string $state): string => ucwords(str_replace('_', ' ', $state))),
 
                 BadgeColumn::make('type')
                     ->colors([
                         'primary'   => 'web_application',
+                        'primary'   => 'web_application',
                         'secondary' => 'mobile_app',
+                        'success'   => 'api',
+                        'warning'   => 'library',
+                        'info'      => 'tool',
+                        'pink'      => 'game',
+                        'gray'      => 'other',
                         'success'   => 'api',
                         'warning'   => 'library',
                         'info'      => 'tool',
@@ -372,9 +437,15 @@ class ProjectResource extends Resource
                     ->label('Tech Stack')
                     ->formatStateUsing(function ($state) {
                         if (!is_array($state) || empty($state)) return 'No technologies';
+                        if (!is_array($state) || empty($state)) return 'No technologies';
                         $count = count($state);
                         return $state[0] . ($count > 1 ? " (+{$count} more)" : '');
+                        return $state[0] . ($count > 1 ? " (+{$count} more)" : '');
                     })
+                    ->tooltip(fn ($record) => is_array($record->technologies)
+                        ? implode(', ', $record->technologies)
+                        : null
+                    ),
                     ->tooltip(fn ($record) => is_array($record->technologies)
                         ? implode(', ', $record->technologies)
                         : null
@@ -446,6 +517,8 @@ class ProjectResource extends Resource
             ])
             ->defaultSort('created_at', 'desc')
             ->defaultPaginationPageOption(10);
+            ->defaultSort('created_at', 'desc')
+            ->defaultPaginationPageOption(10);
     }
 
     public static function getRelations(): array
@@ -459,7 +532,9 @@ class ProjectResource extends Resource
     {
         return [
             'index'  => Pages\ListProjects::route('/'),
+            'index'  => Pages\ListProjects::route('/'),
             'create' => Pages\CreateProject::route('/create'),
+            'edit'   => Pages\EditProject::route('/{record}/edit'),
             'edit'   => Pages\EditProject::route('/{record}/edit'),
         ];
     }
