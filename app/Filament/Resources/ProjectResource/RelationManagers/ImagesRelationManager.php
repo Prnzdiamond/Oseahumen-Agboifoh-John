@@ -21,13 +21,12 @@ class ImagesRelationManager extends RelationManager
     {
         return $form->schema([
             FileUpload::make('image')
-                ->label('Upload Image(s)')
+                ->label('Upload Image')
                 ->image()
                 ->disk('public')
                 ->directory('projects/gallery')
                 ->preserveFilenames()
-                ->multiple()
-                ->required(),
+                ->required(),  // no ->multiple() here — one row per image
         ]);
     }
 
@@ -42,7 +41,7 @@ class ImagesRelationManager extends RelationManager
             ->headerActions([
                 Tables\Actions\CreateAction::make(),
 
-                // ✅ Bulk upload custom action
+                // Bulk upload — handles multiple files, creates one row each
                 Action::make('bulkUpload')
                     ->label('Bulk Upload')
                     ->form([
