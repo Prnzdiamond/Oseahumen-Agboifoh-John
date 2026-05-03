@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class ProjectImage extends Model
 {
@@ -22,16 +23,13 @@ class ProjectImage extends Model
 
         static::updating(function ($projectImage) {
             if ($projectImage->isDirty('image') && $projectImage->getOriginal('image')) {
-                $oldImage = $projectImage->getOriginal('image');
-                if ($oldImage) {
-                    \Illuminate\Support\Facades\Storage::disk('cloudinary')->delete($oldImage);
-                }
+                Storage::disk('public')->delete($projectImage->getOriginal('image'));
             }
         });
 
         static::deleting(function ($projectImage) {
             if ($projectImage->image) {
-                \Illuminate\Support\Facades\Storage::disk('cloudinary')->delete($projectImage->image);
+                Storage::disk('public')->delete($projectImage->image);
             }
         });
     }

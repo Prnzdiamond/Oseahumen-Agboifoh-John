@@ -43,7 +43,7 @@ class ProjectResource extends Resource
                             ->maxLength(255)
                             ->live(onBlur: true)
                             ->afterStateUpdated(
-                                fn (string $context, $state, callable $set) =>
+                                fn(string $context, $state, callable $set) =>
                                 $context === 'create' ? $set('slug', \Illuminate\Support\Str::slug($state)) : null
                             ),
                         Textarea::make('description')
@@ -53,11 +53,11 @@ class ProjectResource extends Resource
 
                         Select::make('status')
                             ->options([
-                                'planning'    => 'Planning',
+                                'planning' => 'Planning',
                                 'in_progress' => 'In Progress',
-                                'completed'   => 'Completed',
-                                'on_hold'     => 'On Hold',
-                                'cancelled'   => 'Cancelled',
+                                'completed' => 'Completed',
+                                'on_hold' => 'On Hold',
+                                'cancelled' => 'Cancelled',
                             ])
                             ->default('planning')
                             ->required(),
@@ -65,13 +65,13 @@ class ProjectResource extends Resource
                         Select::make('type')
                             ->options([
                                 'web_application' => 'Web Application',
-                                'mobile_app'      => 'Mobile App',
-                                'desktop_app'     => 'Desktop App',
-                                'api'             => 'API',
-                                'library'         => 'Library',
-                                'tool'            => 'Tool',
-                                'game'            => 'Game',
-                                'other'           => 'Other',
+                                'mobile_app' => 'Mobile App',
+                                'desktop_app' => 'Desktop App',
+                                'api' => 'API',
+                                'library' => 'Library',
+                                'tool' => 'Tool',
+                                'game' => 'Game',
+                                'other' => 'Other',
                             ])
                             ->default('web_application')
                             ->required(),
@@ -88,16 +88,16 @@ class ProjectResource extends Resource
                         FileUpload::make('image')
                             ->label('Main Image')
                             ->image()
-                            ->directory('project-main-images')
-                            ->disk('cloudinary')
+                            ->directory('projects/images')
+                            ->disk('public')
                             ->nullable()
                             ->extraAttributes(['loading' => 'lazy']),
 
                         FileUpload::make('cover_image')
                             ->label('Cover Image')
                             ->image()
-                            ->directory('project-covers')
-                            ->disk('cloudinary')
+                            ->directory('projects/covers')
+                            ->disk('public')
                             ->nullable()
                             ->extraAttributes(['loading' => 'lazy']),
                     ])
@@ -141,28 +141,29 @@ class ProjectResource extends Resource
                                     ->required()
                                     ->placeholder('e.g. prop-tech, climate-tech, logistics'),
                             ])
-                            ->createOptionUsing(fn (array $data): string => \Illuminate\Support\Str::slug($data['industry']))
-                            ->options(fn () => \App\Models\Project::select('industry')
-                                ->whereNotNull('industry')
-                                ->distinct()
-                                ->orderBy('industry')
-                                ->pluck('industry', 'industry')
-                                ->toArray()
+                            ->createOptionUsing(fn(array $data): string => \Illuminate\Support\Str::slug($data['industry']))
+                            ->options(
+                                fn() => \App\Models\Project::select('industry')
+                                    ->whereNotNull('industry')
+                                    ->distinct()
+                                    ->orderBy('industry')
+                                    ->pluck('industry', 'industry')
+                                    ->toArray()
                                 // Merge with a sensible default list so new installs
                                 // have options without requiring existing projects
                                 + [
-                                    'e-commerce'    => 'E-Commerce',
-                                    'real-estate'   => 'Real Estate',
-                                    'fintech'       => 'Fintech',
-                                    'healthcare'    => 'Healthcare',
-                                    'education'     => 'Education',
-                                    'saas'          => 'SaaS',
-                                    'ai-ml'         => 'AI / ML',
-                                    'gaming'        => 'Gaming',
-                                    'social'        => 'Social',
-                                    'productivity'  => 'Productivity',
+                                    'e-commerce' => 'E-Commerce',
+                                    'real-estate' => 'Real Estate',
+                                    'fintech' => 'Fintech',
+                                    'healthcare' => 'Healthcare',
+                                    'education' => 'Education',
+                                    'saas' => 'SaaS',
+                                    'ai-ml' => 'AI / ML',
+                                    'gaming' => 'Gaming',
+                                    'social' => 'Social',
+                                    'productivity' => 'Productivity',
                                     'entertainment' => 'Entertainment',
-                                    'other'         => 'Other',
+                                    'other' => 'Other',
                                 ]
                             )
                             ->helperText('The primary domain this project lives in. Can add new ones with "Create".'),
@@ -218,15 +219,16 @@ class ProjectResource extends Resource
                                 return Technology::active()
                                     ->where(function ($q) use ($search) {
                                         $q->where('name', 'ilike', "%{$search}%")
-                                          ->orWhere('category', 'ilike', "%{$search}%");
+                                            ->orWhere('category', 'ilike', "%{$search}%");
                                     })
                                     ->orderBy('name')
                                     ->limit(30)
                                     ->pluck('name', 'name')
                                     ->toArray();
                             })
-                            ->getOptionLabelsUsing(fn (array $values) =>
-                                collect($values)->mapWithKeys(fn ($v) => [$v => $v])->toArray()
+                            ->getOptionLabelsUsing(
+                                fn(array $values) =>
+                                collect($values)->mapWithKeys(fn($v) => [$v => $v])->toArray()
                             )
                             ->createOptionForm([
                                 TextInput::make('name')
@@ -236,12 +238,14 @@ class ProjectResource extends Resource
                             ])
                             ->createOptionUsing(function (array $data): string {
                                 Technology::firstOrCreate(
-                                    ['slug' => \Illuminate\Support\Str::slug(
-                                        preg_replace('/[\.\+#]/', '', $data['name'])
-                                    )],
                                     [
-                                        'name'      => $data['name'],
-                                        'category'  => 'other',
+                                        'slug' => \Illuminate\Support\Str::slug(
+                                            preg_replace('/[\.\+#]/', '', $data['name'])
+                                        )
+                                    ],
+                                    [
+                                        'name' => $data['name'],
+                                        'category' => 'other',
                                         'is_manual' => true,
                                         'is_active' => true,
                                     ]
@@ -287,11 +291,11 @@ class ProjectResource extends Resource
                                 Select::make('platform')
                                     ->label('Platform')
                                     ->options([
-                                        'github'    => 'GitHub',
-                                        'gitlab'    => 'GitLab',
+                                        'github' => 'GitHub',
+                                        'gitlab' => 'GitLab',
                                         'bitbucket' => 'Bitbucket',
-                                        'codeberg'  => 'Codeberg',
-                                        'other'     => 'Other',
+                                        'codeberg' => 'Codeberg',
+                                        'other' => 'Other',
                                     ])
                                     ->default('github')
                                     ->required(),
@@ -327,7 +331,7 @@ class ProjectResource extends Resource
         return $table
             ->columns([
                 ImageColumn::make('image')
-                    ->disk('cloudinary')
+                    ->disk('public')
                     ->label('Image')
                     ->circular()
                     ->size(50),
@@ -340,43 +344,45 @@ class ProjectResource extends Resource
 
                 BadgeColumn::make('status')
                     ->colors([
-                        'success'   => 'completed',
-                        'primary'   => 'in_progress',
-                        'warning'   => 'planning',
+                        'success' => 'completed',
+                        'primary' => 'in_progress',
+                        'warning' => 'planning',
                         'secondary' => 'on_hold',
-                        'danger'    => 'cancelled',
+                        'danger' => 'cancelled',
                     ])
-                    ->formatStateUsing(fn (string $state): string => ucwords(str_replace('_', ' ', $state))),
+                    ->formatStateUsing(fn(string $state): string => ucwords(str_replace('_', ' ', $state))),
 
                 BadgeColumn::make('type')
                     ->colors([
-                        'primary'   => 'web_application',
+                        'primary' => 'web_application',
                         'secondary' => 'mobile_app',
-                        'success'   => 'api',
-                        'warning'   => 'library',
-                        'info'      => 'tool',
-                        'pink'      => 'game',
-                        'gray'      => 'other',
+                        'success' => 'api',
+                        'warning' => 'library',
+                        'info' => 'tool',
+                        'pink' => 'game',
+                        'gray' => 'other',
                     ])
-                    ->formatStateUsing(fn (string $state): string => ucwords(str_replace('_', ' ', $state))),
+                    ->formatStateUsing(fn(string $state): string => ucwords(str_replace('_', ' ', $state))),
 
                 // ── New: industry column ──────────────────────────────────────
                 TextColumn::make('industry')
                     ->label('Industry')
                     ->badge()
                     ->color('info')
-                    ->formatStateUsing(fn ($state) => $state ? ucwords(str_replace('-', ' ', $state)) : '—')
+                    ->formatStateUsing(fn($state) => $state ? ucwords(str_replace('-', ' ', $state)) : '—')
                     ->sortable()
                     ->toggleable(),
 
                 TextColumn::make('technologies')
                     ->label('Tech Stack')
                     ->formatStateUsing(function ($state) {
-                        if (!is_array($state) || empty($state)) return 'No technologies';
+                        if (!is_array($state) || empty($state))
+                            return 'No technologies';
                         $count = count($state);
                         return $state[0] . ($count > 1 ? " (+{$count} more)" : '');
                     })
-                    ->tooltip(fn ($record) => is_array($record->technologies)
+                    ->tooltip(
+                        fn($record) => is_array($record->technologies)
                         ? implode(', ', $record->technologies)
                         : null
                     ),
@@ -401,32 +407,33 @@ class ProjectResource extends Resource
             ])
             ->filters([
                 SelectFilter::make('status')->options([
-                    'planning'    => 'Planning',
+                    'planning' => 'Planning',
                     'in_progress' => 'In Progress',
-                    'completed'   => 'Completed',
-                    'on_hold'     => 'On Hold',
-                    'cancelled'   => 'Cancelled',
+                    'completed' => 'Completed',
+                    'on_hold' => 'On Hold',
+                    'cancelled' => 'Cancelled',
                 ]),
                 SelectFilter::make('type')->options([
                     'web_application' => 'Web Application',
-                    'mobile_app'      => 'Mobile App',
-                    'desktop_app'     => 'Desktop App',
-                    'api'             => 'API',
-                    'library'         => 'Library',
-                    'tool'            => 'Tool',
-                    'game'            => 'Game',
-                    'other'           => 'Other',
+                    'mobile_app' => 'Mobile App',
+                    'desktop_app' => 'Desktop App',
+                    'api' => 'API',
+                    'library' => 'Library',
+                    'tool' => 'Tool',
+                    'game' => 'Game',
+                    'other' => 'Other',
                 ]),
                 // ── New: filter by industry ───────────────────────────────────
                 SelectFilter::make('industry')
                     ->label('Industry')
-                    ->options(fn () => \App\Models\Project::select('industry')
-                        ->whereNotNull('industry')
-                        ->distinct()
-                        ->orderBy('industry')
-                        ->pluck('industry', 'industry')
-                        ->map(fn ($v) => ucwords(str_replace('-', ' ', $v)))
-                        ->toArray()
+                    ->options(
+                        fn() => \App\Models\Project::select('industry')
+                            ->whereNotNull('industry')
+                            ->distinct()
+                            ->orderBy('industry')
+                            ->pluck('industry', 'industry')
+                            ->map(fn($v) => ucwords(str_replace('-', ' ', $v)))
+                            ->toArray()
                     )
                     ->searchable(),
                 Tables\Filters\TernaryFilter::make('is_featured')
@@ -459,9 +466,9 @@ class ProjectResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => Pages\ListProjects::route('/'),
+            'index' => Pages\ListProjects::route('/'),
             'create' => Pages\CreateProject::route('/create'),
-            'edit'   => Pages\EditProject::route('/{record}/edit'),
+            'edit' => Pages\EditProject::route('/{record}/edit'),
         ];
     }
 

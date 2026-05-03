@@ -40,7 +40,7 @@ class OwnerProfileResource extends Resource
                     ->schema([
                         // Speed fix: lazy load prevents Cloudinary blocking the page
                         FileUpload::make('avatar')
-                            ->disk('cloudinary')
+                            ->disk('public')
                             ->directory('avatars')
                             ->image()
                             ->preserveFilenames()
@@ -300,7 +300,7 @@ class OwnerProfileResource extends Resource
         return $table
             ->columns([
                 ImageColumn::make('avatar')
-                    ->disk('cloudinary')
+                    ->disk('public')
                     ->circular()
                     ->label('Avatar'),
 

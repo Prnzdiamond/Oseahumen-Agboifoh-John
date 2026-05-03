@@ -24,7 +24,7 @@ class ImagesRelationManager extends RelationManager
                 ->label('Upload Image(s)')
                 ->image()
                 ->disk('public')
-                ->directory('project-images')
+                ->directory('projects/gallery')
                 ->preserveFilenames()
                 ->multiple()
                 ->required(),
@@ -36,7 +36,7 @@ class ImagesRelationManager extends RelationManager
         return $table
             ->columns([
                 ImageColumn::make('image')
-                    ->disk('cloudinary')
+                    ->disk('public')
                     ->label('Image'),
             ])
             ->headerActions([
@@ -50,8 +50,8 @@ class ImagesRelationManager extends RelationManager
                             ->label('Upload Multiple Images')
                             ->multiple()
                             ->image()
-                            ->disk('cloudinary')
-                            ->directory('project-images')
+                            ->disk('public')
+                            ->directory('projects/gallery')
                             ->preserveFilenames()
                             ->required(),
                     ])

@@ -3,32 +3,22 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
-use Cloudinary\Api\Exception\NotFound;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class OwnerResource extends JsonResource
 {
-    /**
-     * Transform the resource into an array.
-     *
-     * @return array<string, mixed>
-     */
     public function toArray(Request $request): array
     {
         return [
             'name' => $this->name,
             'headline' => $this->headline,
             'bio' => $this->bio,
-            'avatar' => $this->avatar ? (fn() =>
-                (function () {
-                    try {
-                        return Storage::disk('cloudinary')->url($this->avatar);
-                    } catch (NotFound $e) {
-                        return null;
-                    }
-                })()
-            )() : null,
+
+            'avatar' => $this->avatar
+                ? Storage::disk('public')->url($this->avatar)
+                : null,
+
             'tech_stack' => $this->tech_stack_list ?? [],
             'expertise' => $this->expertise_list ?? [],
             'links' => $this->urls_list ?? [],
@@ -37,7 +27,6 @@ class OwnerResource extends JsonResource
             'languages' => $this->languages_list ?? [],
             'contact_info' => $this->contact_info_list ?? [],
 
-            // Helper methods for quick access
             'social_links' => [
                 'github' => $this->getGithubUrl(),
                 'linkedin' => $this->getLinkedinUrl(),
