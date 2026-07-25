@@ -1,4 +1,5 @@
 <?php
+
 // app/Http/Middleware/ValidateOrigin.php
 
 namespace App\Http\Middleware;
@@ -11,12 +12,24 @@ class ValidateOrigin
 {
     public function handle(Request $request, Closure $next): Response
     {
-        // Get allowed origins from environment
-        $allowedOrigins = array_filter(explode(',', env('ALLOWED_ORIGINS', '')));
+        // IMPORTANT: read config(), never env(). Production deploys run
+        // `php artisan optimize` (config:cache), after which env() returns null.
+        // A null-returning env() here previously (a) let a null bypass secret
+        // match a missing header and skip the allowlist entirely, and
+        // (b) emptied the allowlist so every header-bearing request 403'd.
+        // See config/services.php 'frontend'.
+        $allowedOrigins = array_filter(
+            explode(',', config('services.frontend.allowed_origins', ''))
+        );
 
-        if (
-            $request->header('X-Bypass-Sitemap') === env('SITEMAP_BYPASS_SECRET')
-        ) {
+        // Trusted server-to-server callers (Nuxt SSR, sitemap generation) send a
+        // shared secret instead of a browser Origin. Constant-time compare, and
+        // require BOTH sides to be non-empty so a missing/blank token can never
+        // authenticate — closes the previous `null === null` bypass.
+        $serverToken = (string) config('services.frontend.server_token', '');
+        $sentToken = (string) $request->header('X-Server-Token', '');
+
+        if ($serverToken !== '' && $sentToken !== '' && hash_equals($serverToken, $sentToken)) {
             return $next($request);
         }
 
@@ -36,6 +49,7 @@ class ValidateOrigin
                     ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept')
                     ->header('Access-Control-Max-Age', '86400');
             }
+
             return response('', 403);
         }
 
@@ -43,8 +57,8 @@ class ValidateOrigin
         $referer = $request->header('Referer');
 
         if (
-            !$this->isValidOrigin($origin, $allowedOrigins) &&
-            !$this->isValidReferer($referer, $allowedOrigins)
+            ! $this->isValidOrigin($origin, $allowedOrigins) &&
+            ! $this->isValidReferer($referer, $allowedOrigins)
         ) {
             return response()->json(['error' => 'Access denied'], 403);
         }
@@ -64,15 +78,18 @@ class ValidateOrigin
 
     private function isValidOrigin(?string $origin, array $allowedOrigins): bool
     {
-        if (!$origin)
+        if (! $origin) {
             return false;
+        }
+
         return in_array($origin, $allowedOrigins);
     }
 
     private function isValidReferer(?string $referer, array $allowedOrigins): bool
     {
-        if (!$referer)
+        if (! $referer) {
             return false;
+        }
 
         foreach ($allowedOrigins as $allowedOrigin) {
             if (str_starts_with($referer, $allowedOrigin)) {
